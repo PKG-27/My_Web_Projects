@@ -7,17 +7,21 @@
     <link rel="stylesheet" href="style.css" />
   </head>
 
-<!--Container Input Box-->
   <body>
+    <!-- Light/Dark mode switch -->
+    <button id="theme-toggle">🌙 Dark</button>
+
+    <!--Container Input Box-->
     <div class="container">
       <h1>My To-Do List</h1>
 
       <div class="input-row">
         <input type="text" id="task-input" placeholder="What do you need to do?" />
+        <input type="date" id="task-date" />
         <button id="add-btn">Add</button>
       </div>
 
-<!-- Progress  Bar Section -->
+      <!-- Progress  Bar Section -->
       <div class="progress-section">
         <div class="progress-label">
           Overall progress: <span id="progress-percent">0%</span>
@@ -27,10 +31,13 @@
         </div>
       </div>
 
-<!-- Task List Section -->
+      <!-- Task List Section -->
+      <div class="list-heading-row">
+        <h2 id="list-heading">Today's Tasks</h2>
+        <button id="today-btn">Back to Today</button>
+      </div>
       <ul id="task-list"></ul>
-
-<!-- Calendar Section -->
+       <!-- Calendar Section -->
       <div class="container_calendar">
         <h1>Calendar</h1>
         <div class="calendar">
@@ -49,9 +56,10 @@
             <tbody id="calendar-body"></tbody>
           </table>
         </div>
+      </div>
     </div>
 
-<!-- JavaScript Section -->
+    <!-- JavaScript Section -->
     <script src="script.js"></script>
   </body>
 </html>
