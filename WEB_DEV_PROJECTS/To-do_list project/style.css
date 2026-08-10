@@ -169,3 +169,16 @@ h1 {
   padding: 8px;
   font-size: 13px;
 }
+
+@media (max-width: 380px) {
+  .container,
+  .container_calendar {
+    padding: 14px;
+  }
+
+  #calendar-table th,
+  #calendar-table td {
+    padding: 2px;
+    font-size: 10px;
+  }
+}
