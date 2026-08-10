@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My To-Do List</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+
+<!--Container Input Box-->
+  <body>
+    <div class="container">
+      <h1>My To-Do List</h1>
+
+      <div class="input-row">
+        <input type="text" id="task-input" placeholder="What do you need to do?" />
+        <button id="add-btn">Add</button>
+      </div>
+
+<!-- Progress  Bar Section -->
+      <div class="progress-section">
+        <div class="progress-label">
+          Overall progress: <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+
+<!-- Task List Section -->
+      <ul id="task-list"></ul>
+
+<!-- Calendar Section -->
+      <div class="container_calendar">
+        <h1>Calendar</h1>
+        <div class="calendar">
+          <div class="calendar-header">
+            <button id="prev-month">&lt;</button>
+            <h2 id="month-year"></h2>
+            <button id="next-month">&gt;</button>
+          </div>
+          <table id="calendar-table">
+            <thead>
+              <tr>
+                <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th>
+                <th>Thu</th><th>Fri</th><th>Sat</th>
+              </tr>
+            </thead>
+            <tbody id="calendar-body"></tbody>
+          </table>
+        </div>
+    </div>
+
+<!-- JavaScript Section -->
+    <script src="script.js"></script>
+  </body>
+</html>
