@@ -1,36 +1,9 @@
 /* ============================================================
-   PART 1: THE TO-DO LIST
+   PART 0: SMALL SHARED HELPERS
    ============================================================ */
 
-// ---- Step 1: Grab the HTML elements we need to control ----
-const taskInput = document.getElementById('task-input');
-const addBtn = document.getElementById('add-btn');
-const taskList = document.getElementById('task-list');
-const progressPercentEl = document.getElementById('progress-percent');
-const progressFillEl = document.getElementById('progress-fill');
-
-// ---- Step 2: Our data ----
-// Each task now looks like: { text, completed, date }
-// "date" is filled in AUTOMATICALLY (no new input box needed) —
-// whatever day you click "Add" on is the day the task gets stamped
-// with. That's what lets us answer "how many did I finish today?".
-let tasks = [];
-
-const savedTasks = localStorage.getItem('tasks');
-if (savedTasks) {
-  tasks = JSON.parse(savedTasks);
-  // Tasks saved before this update won't have a "date" — give them
-  // today's date as a harmless fallback so nothing breaks.
-  tasks.forEach(function (task) {
-    if (!task.date) task.date = todayStr();
-  });
-}
-
-// ---- Small date helper, shared by both parts of this file ----
 // Turns a Date object into a "YYYY-MM-DD" text string using LOCAL
-// time. We use this (instead of toISOString) because ISO time is
-// based on UTC and can accidentally shift the date by a day
-// depending on where you live.
+// time, so it matches the date the user actually sees/picks.
 function toDateStr(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -42,15 +15,108 @@ function todayStr() {
   return toDateStr(new Date());
 }
 
-// ---- Step 3: Functions ----
+
+/* ============================================================
+   PART 1: LIGHT / DARK MODE
+   ============================================================ */
+
+const themeToggleBtn = document.getElementById('theme-toggle');
+
+function applyTheme(theme) {
+  // Adding/removing a CSS class is all this needs to do — every
+  // color in style.css is written as var(--something), and the
+  // "light-mode" class on <body> swaps those variables' values.
+  if (theme === 'light') {
+    document.body.classList.add('light-mode');
+    themeToggleBtn.textContent = '☀️ Light';
+  } else {
+    document.body.classList.remove('light-mode');
+    themeToggleBtn.textContent = '🌙 Dark';
+  }
+}
+
+// Remember the choice across visits, same trick as saving tasks.
+const savedTheme = localStorage.getItem('theme') || 'dark';
+applyTheme(savedTheme);
+
+themeToggleBtn.addEventListener('click', function () {
+  const isLight = document.body.classList.contains('light-mode');
+  const newTheme = isLight ? 'dark' : 'light';
+  applyTheme(newTheme);
+  localStorage.setItem('theme', newTheme);
+});
+
+
+/* ============================================================
+   PART 2: THE TO-DO LIST
+   ============================================================ */
+
+const taskInput = document.getElementById('task-input');
+const taskDateInput = document.getElementById('task-date');
+const addBtn = document.getElementById('add-btn');
+const taskList = document.getElementById('task-list');
+const listHeading = document.getElementById('list-heading');
+const todayBtn = document.getElementById('today-btn');
+const progressPercentEl = document.getElementById('progress-percent');
+const progressFillEl = document.getElementById('progress-fill');
+
+// Each task looks like: { text, completed, date }
+// "date" now comes from the new date picker, so you can schedule a
+// task for TODAY (the default) or any day in advance.
+let tasks = [];
+
+const savedTasks = localStorage.getItem('tasks');
+if (savedTasks) {
+  tasks = JSON.parse(savedTasks);
+  tasks.forEach(function (task) {
+    if (!task.date) task.date = todayStr(); // fallback for old saved tasks
+  });
+}
+
+// Which date's tasks are currently shown in the main list.
+// This is shared with the calendar below — clicking a calendar day
+// changes this same variable, which is what "replaces" the list.
+let selectedDate = todayStr();
+
+// Default the date picker to today, so adding a task is one click
+// unless you specifically want to schedule it ahead.
+taskDateInput.value = todayStr();
+
 function saveTasks() {
   localStorage.setItem('tasks', JSON.stringify(tasks));
 }
 
+// Redraws the list heading ("Today's Tasks" or a specific date).
+function renderListHeading() {
+  listHeading.textContent = selectedDate === todayStr()
+    ? "Today's Tasks"
+    : `Tasks for ${selectedDate}`;
+}
+
+// Redraws the <ul>, showing ONLY tasks whose date matches
+// selectedDate — this is the "replace the list" behavior.
 function renderTasks() {
   taskList.innerHTML = '';
+  renderListHeading();
 
-  tasks.forEach(function (task, index) {
+  const visibleTasks = tasks.filter(function (t) {
+    return t.date === selectedDate;
+  });
+
+  if (visibleTasks.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'empty-message';
+    li.textContent = 'No tasks for this date yet.';
+    taskList.appendChild(li);
+    return;
+  }
+
+  visibleTasks.forEach(function (task) {
+    // Look up this task's real position in the full "tasks" array
+    // (not its position in visibleTasks) so toggling/deleting hits
+    // the right task even though the list is filtered.
+    const index = tasks.indexOf(task);
+
     const li = document.createElement('li');
     li.className = 'task-item' + (task.completed ? ' completed' : '');
 
@@ -61,7 +127,7 @@ function renderTasks() {
       saveTasks();
       renderTasks();
       renderProgress();
-      updateDayStats(); // keep the "finished on this date" count in sync
+      renderCalendar(); // that day's completed count may have changed
     });
 
     const deleteBtn = document.createElement('button');
@@ -71,8 +137,7 @@ function renderTasks() {
       saveTasks();
       renderTasks();
       renderProgress();
-      renderCalendar(); // a day's dot/count may need to disappear
-      updateDayStats();
+      renderCalendar();
     });
 
     li.appendChild(span);
@@ -81,6 +146,8 @@ function renderTasks() {
   });
 }
 
+// The progress bar always reflects ALL tasks (every date combined),
+// separate from whichever single day the list is currently showing.
 function renderProgress() {
   const total = tasks.length;
   const completed = tasks.filter(function (t) { return t.completed; }).length;
@@ -94,25 +161,37 @@ function addTask() {
   const text = taskInput.value.trim();
   if (text === '') return;
 
-  tasks.push({ text: text, completed: false, date: todayStr() });
+  // If the date field is somehow empty, fall back to today.
+  const date = taskDateInput.value || todayStr();
+
+  tasks.push({ text: text, completed: false, date: date });
   taskInput.value = '';
   saveTasks();
+
+  // Jump the list to show the date you just added a task for, so
+  // you immediately see it appear.
+  selectedDate = date;
+
   renderTasks();
   renderProgress();
-  renderCalendar();   // today's cell now has one more task
-  updateDayStats();
+  renderCalendar();
 }
 
-// ---- Step 4: Connect user actions to our functions ----
 addBtn.addEventListener('click', addTask);
 
 taskInput.addEventListener('keydown', function (event) {
   if (event.key === 'Enter') addTask();
 });
 
+todayBtn.addEventListener('click', function () {
+  selectedDate = todayStr();
+  renderTasks();
+  renderCalendar();
+});
+
 
 /* ============================================================
-   PART 2: THE CALENDAR
+   PART 3: THE CALENDAR
    ============================================================ */
 
 const calendarBody = document.getElementById('calendar-body');
@@ -120,35 +199,23 @@ const monthYearLabel = document.getElementById('month-year');
 const prevMonthBtn = document.getElementById('prev-month');
 const nextMonthBtn = document.getElementById('next-month');
 
-// Which month is currently being displayed.
+// Which MONTH is currently on screen (separate from selectedDate,
+// which is which single DAY's tasks are being shown).
 let calendarViewDate = new Date();
 
-// Which date the user has clicked on, to inspect its stats.
-// Starts as today, so you see today's count without clicking anything.
-let selectedDate = todayStr();
-
-// Creates (once) a little box under the calendar header to show
-// "X of Y tasks finished" for whatever date is selected. We build
-// this with JavaScript instead of editing the HTML file.
+// A small "X of Y finished" line under the calendar header.
 const dayStatsEl = document.createElement('div');
 dayStatsEl.id = 'day-stats';
-dayStatsEl.style.textAlign = 'center';
-dayStatsEl.style.color = '#faf7f7';
-dayStatsEl.style.fontSize = '13px';
-dayStatsEl.style.margin = '4px 0 10px';
 document
   .querySelector('.calendar-header')
   .insertAdjacentElement('afterend', dayStatsEl);
 
-// Counts how many tasks fall on a given "YYYY-MM-DD" date, and how
-// many of those are completed.
 function getStatsForDate(dateStr) {
   const dayTasks = tasks.filter(function (t) { return t.date === dateStr; });
   const completed = dayTasks.filter(function (t) { return t.completed; }).length;
   return { total: dayTasks.length, completed: completed };
 }
 
-// Updates the little stats box to match whatever date is selected.
 function updateDayStats() {
   const stats = getStatsForDate(selectedDate);
   const isToday = selectedDate === todayStr();
@@ -182,39 +249,30 @@ function renderCalendar() {
       const cell = document.createElement('td');
 
       if (date === 1 && weekday < startWeekday) {
-        // blank cell before the 1st
+        cell.className = 'empty';
       } else if (date > daysInMonth) {
-        // blank cell after the last day
+        cell.className = 'empty';
       } else {
         const cellDateStr = toDateStr(new Date(year, month, date));
         cell.textContent = date;
-        cell.style.cursor = 'pointer';
-        cell.style.borderRadius = '4px';
 
-        // ---- Pinpoint today ----
-        if (cellDateStr === todayStr()) {
-          cell.style.border = '2px solid #4a90e2';
-          cell.style.fontWeight = 'bold';
-        }
+        if (cellDateStr === todayStr()) cell.classList.add('today');
+        if (cellDateStr === selectedDate) cell.classList.add('selected');
 
-        // ---- Highlight whichever date is currently selected ----
-        if (cellDateStr === selectedDate) {
-          cell.style.backgroundColor = '#4a90e2';
-          cell.style.color = '#ffffff';
-        }
-
-        // ---- Small dot under any day that has tasks ----
         const stats = getStatsForDate(cellDateStr);
         if (stats.total > 0) {
           cell.title = `${stats.completed} of ${stats.total} finished`;
-          if (cellDateStr !== selectedDate) {
-            cell.style.textDecoration = 'underline';
-          }
+          const countEl = document.createElement('span');
+          countEl.className = 'day-count';
+          countEl.textContent = `${stats.completed}/${stats.total}`;
+          cell.appendChild(countEl);
         }
 
-        // Clicking a day selects it and refreshes the stats box.
+        // Clicking a day is what "replaces" the to-do list above
+        // with that day's tasks.
         cell.addEventListener('click', function () {
           selectedDate = cellDateStr;
+          renderTasks();
           renderCalendar();
           updateDayStats();
         });
@@ -227,6 +285,8 @@ function renderCalendar() {
 
     calendarBody.appendChild(row);
   }
+
+  updateDayStats();
 }
 
 prevMonthBtn.addEventListener('click', function () {
@@ -249,9 +309,8 @@ nextMonthBtn.addEventListener('click', function () {
 
 
 /* ============================================================
-   PART 3: DRAW EVERYTHING ONCE, WHEN THE PAGE FIRST LOADS
+   PART 4: DRAW EVERYTHING ONCE, WHEN THE PAGE FIRST LOADS
    ============================================================ */
 renderTasks();
 renderProgress();
 renderCalendar();
-updateDayStats();
